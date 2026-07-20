@@ -1,0 +1,29 @@
+# Go
+backend/server
+backend/bin/
+backend/vendor/
+
+# Environment
+.env
+.env.*
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage
+coverage.out
+
+# Temporary
+tmp/
