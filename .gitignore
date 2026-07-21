@@ -28,3 +28,6 @@ coverage.out
 
 # Temporary
 tmp/
+
+# Secrets
+secrets/

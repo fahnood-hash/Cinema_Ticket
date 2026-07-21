@@ -11,6 +11,9 @@ services:
       MONGO_URI: mongodb://mongo:27017
       REDIS_ADDR: redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
+    volumes:
+      - ./backend/secrets:/app/secrets:ro
     depends_on:
       - mongo
       - redis

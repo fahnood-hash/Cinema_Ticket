@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cinema-ticket-api/internal/authentication"
 	"cinema-ticket-api/internal/booking"
 	"cinema-ticket-api/internal/database"
 	"cinema-ticket-api/internal/handler"
@@ -47,10 +48,26 @@ func main() {
 	}
 	defer publisher.Close()
 
+	firebaseAuth, err := authentication.NewFirebaseAuthenticator(
+		getEnv(
+			"FIREBASE_CREDENTIALS_PATH",
+			"secrets/firebase-service-account.json",
+		),
+	)
+	if err != nil {
+		log.Fatal("Firebase initialization failed: ", err)
+	}
+
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 	seatHub := realtime.NewHub()
 	r.GET("/ws", seatHub.HandleConnection)
+	r.GET("/me", firebaseAuth.RequireAuth(), func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"user_id": authentication.UserID(c),
+			"email":   c.GetString("email"),
+		})
+	})
 
 	go realtime.StartExpiredLockListener(
 		context.Background(),
