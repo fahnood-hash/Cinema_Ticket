@@ -51,7 +51,6 @@ func NewService(
 	bookingRepository *repository.BookingRepository,
 	publisher *queue.Publisher,
 	hub *realtime.Hub,
-
 ) *Service {
 	return &Service{
 		redis:     redisClient,
@@ -105,6 +104,12 @@ func (s *Service) HoldSeat(ctx context.Context, userID, seatID string) (*Booking
 		return nil, err
 	}
 
+	s.hub.Broadcast(realtime.SeatEvent{
+		Type:   "seat.updated",
+		SeatID: booking.SeatID,
+		Status: string(models.SeatLocked),
+	})
+
 	return booking, nil
 }
 
@@ -155,6 +160,12 @@ func (s *Service) ConfirmSeat(ctx context.Context, sessionID, userID string) (*B
 		return nil, err
 	}
 
+	s.hub.Broadcast(realtime.SeatEvent{
+		Type:   "seat.updated",
+		SeatID: booking.SeatID,
+		Status: string(models.SeatBooked),
+	})
+
 	return booking, nil
 
 }
@@ -171,7 +182,17 @@ func (s *Service) ReleaseSeat(ctx context.Context, sessionID, userID string) err
 
 	s.releaseLock(ctx, booking.SeatID, booking.ID)
 
-	return s.redis.Del(ctx, sessionKey(booking.ID)).Err()
+	if err := s.redis.Del(ctx, sessionKey(booking.ID)).Err(); err != nil {
+		return err
+	}
+
+	s.hub.Broadcast(realtime.SeatEvent{
+		Type:   "seat.updated",
+		SeatID: booking.SeatID,
+		Status: string(models.SeatAvailable),
+	})
+
+	return nil
 }
 
 func (s *Service) ListSeats(ctx context.Context) ([]models.Seat, error) {
