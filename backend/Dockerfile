@@ -7,7 +7,8 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o server ./cmd/api
+ARG APP=api
+RUN go build -o server ./cmd/${APP}
 
 EXPOSE 8080
 
