@@ -1,6 +1,9 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        APP: api
     ports:
       - "8080:8080"
     environment:
@@ -11,6 +14,18 @@ services:
     depends_on:
       - mongo
       - redis
+      - rabbitmq
+
+  worker:
+    build:
+      context: ./backend
+      args:
+        APP: worker
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - mongo
       - rabbitmq
 
   mongo:
