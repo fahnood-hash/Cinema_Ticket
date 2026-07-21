@@ -52,6 +52,13 @@ func main() {
 	seatHub := realtime.NewHub()
 	r.GET("/ws", seatHub.HandleConnection)
 
+	go realtime.StartExpiredLockListener(
+		context.Background(),
+		redisClient,
+		seatHub,
+		publisher,
+	)
+
 	bookingRepo := repository.NewBookingRepository(
 		mongoClient.Database("cinema_booking"),
 	)
