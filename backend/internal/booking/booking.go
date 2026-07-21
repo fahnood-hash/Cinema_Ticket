@@ -1,15 +1,16 @@
 package booking
 
 import (
+	"cinema-ticket-api/internal/models"
+	"cinema-ticket-api/internal/queue"
+	"cinema-ticket-api/internal/realtime"
+	"cinema-ticket-api/internal/repository"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
-
-	"cinema-ticket-api/internal/models"
-
-	"cinema-ticket-api/internal/repository"
 
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -39,17 +40,24 @@ type Booking struct {
 }
 
 type Service struct {
-	redis *redis.Client
-	repo  *repository.BookingRepository
+	redis     *redis.Client
+	repo      *repository.BookingRepository
+	publisher *queue.Publisher
+	hub       *realtime.Hub
 }
 
 func NewService(
 	redisClient *redis.Client,
 	bookingRepository *repository.BookingRepository,
+	publisher *queue.Publisher,
+	hub *realtime.Hub,
+
 ) *Service {
 	return &Service{
-		redis: redisClient,
-		repo:  bookingRepository,
+		redis:     redisClient,
+		repo:      bookingRepository,
+		publisher: publisher,
+		hub:       hub,
 	}
 }
 func (s *Service) HoldSeat(ctx context.Context, userID, seatID string) (*Booking, error) {
@@ -61,9 +69,12 @@ func (s *Service) HoldSeat(ctx context.Context, userID, seatID string) (*Booking
 		return nil, errors.New("seat_id is required")
 	}
 
-	if exists, err := s.redis.Exists(ctx, bookedKey(seatID)).Result(); err != nil {
+	bookedSeats, err := s.repo.ListConfirmedSeatIDs(ctx)
+	if err != nil {
 		return nil, err
-	} else if exists > 0 {
+	}
+
+	if bookedSeats[seatID] {
 		return nil, ErrSeatUnavailable
 	}
 
@@ -115,15 +126,6 @@ func (s *Service) ConfirmSeat(ctx context.Context, sessionID, userID string) (*B
 		return nil, err
 	}
 
-	booked, err := s.redis.SetNX(ctx, bookedKey(booking.SeatID), booking.ID, 0).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	if !booked {
-		return nil, ErrSeatUnavailable
-	}
-
 	booking.Status = StatusConfirmed
 
 	if err := s.repo.Create(
@@ -132,8 +134,21 @@ func (s *Service) ConfirmSeat(ctx context.Context, sessionID, userID string) (*B
 		booking.UserID,
 		booking.SeatID,
 	); err != nil {
-		s.redis.Del(ctx, bookedKey(booking.SeatID))
+		//s.redis.Del(ctx, bookedKey(booking.SeatID))
 		return nil, err
+	}
+
+	if err := s.publisher.PublishBookingConfirmed(
+		ctx,
+		queue.BookingConfirmedEvent{
+			EventType:  "BOOKING_SUCCESS",
+			BookingID:  booking.ID,
+			UserID:     booking.UserID,
+			SeatID:     booking.SeatID,
+			OccurredAt: time.Now(),
+		},
+	); err != nil {
+		log.Printf("Booking confirmed, but audit event failed: %v", err)
 	}
 
 	if err := s.redis.Del(ctx, lockKey(booking.SeatID), sessionKey(booking.ID)).Err(); err != nil {
@@ -141,6 +156,7 @@ func (s *Service) ConfirmSeat(ctx context.Context, sessionID, userID string) (*B
 	}
 
 	return booking, nil
+
 }
 
 func (s *Service) ReleaseSeat(ctx context.Context, sessionID, userID string) error {
@@ -159,6 +175,11 @@ func (s *Service) ReleaseSeat(ctx context.Context, sessionID, userID string) err
 }
 
 func (s *Service) ListSeats(ctx context.Context) ([]models.Seat, error) {
+	bookedSeats, err := s.repo.ListConfirmedSeatIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	seats := make([]models.Seat, 0, 40)
 
 	for row := 'A'; row <= 'E'; row++ {
@@ -170,12 +191,7 @@ func (s *Service) ListSeats(ctx context.Context) ([]models.Seat, error) {
 				Status: models.SeatAvailable,
 			}
 
-			isBooked, err := s.redis.Exists(ctx, bookedKey(seatID)).Result()
-			if err != nil {
-				return nil, err
-			}
-
-			if isBooked > 0 {
+			if bookedSeats[seatID] {
 				seat.Status = models.SeatBooked
 			} else {
 				isLocked, err := s.redis.Exists(ctx, lockKey(seatID)).Result()
@@ -227,9 +243,9 @@ func lockKey(seatID string) string {
 	return "seat:lock:" + seatID
 }
 
-func bookedKey(seatID string) string {
+/*func bookedKey(seatID string) string {
 	return "seat:booked:" + seatID
-}
+}*/
 
 func sessionKey(sessionID string) string {
 	return "booking:session:" + sessionID

@@ -34,3 +34,35 @@ func (r *BookingRepository) Create(
 
 	return err
 }
+
+func (r *BookingRepository) ListConfirmedSeatIDs(
+	ctx context.Context,
+) (map[string]bool, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"status": "CONFIRMED",
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	bookedSeats := make(map[string]bool)
+
+	for cursor.Next(ctx) {
+		var booking struct {
+			SeatID string `bson:"seat_id"`
+		}
+
+		if err := cursor.Decode(&booking); err != nil {
+			return nil, err
+		}
+
+		bookedSeats[booking.SeatID] = true
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return bookedSeats, nil
+}

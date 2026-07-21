@@ -1,14 +1,15 @@
 package main
 
 import (
+	"cinema-ticket-api/internal/booking"
 	"cinema-ticket-api/internal/database"
+	"cinema-ticket-api/internal/handler"
+	"cinema-ticket-api/internal/queue"
+	"cinema-ticket-api/internal/realtime"
+	"cinema-ticket-api/internal/repository"
 	"context"
 	"log"
 	"os"
-
-	"cinema-ticket-api/internal/booking"
-	"cinema-ticket-api/internal/handler"
-	"cinema-ticket-api/internal/repository"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,8 +39,18 @@ func main() {
 	}
 	defer redisClient.Close()
 
+	publisher, err := queue.NewPublisher(
+		getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
+	)
+	if err != nil {
+		log.Fatal("RabbitMQ connection failed: ", err)
+	}
+	defer publisher.Close()
+
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
+	seatHub := realtime.NewHub()
+	r.GET("/ws", seatHub.HandleConnection)
 
 	bookingRepo := repository.NewBookingRepository(
 		mongoClient.Database("cinema_booking"),
@@ -48,6 +59,8 @@ func main() {
 	bookingService := booking.NewService(
 		redisClient,
 		bookingRepo,
+		publisher,
+		seatHub,
 	)
 
 	seatHandler := handler.NewSeatHandler(bookingService)
