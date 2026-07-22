@@ -3,10 +3,16 @@ import { ref } from "vue";
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 import BookingPage from "./components/BookingPage.vue";
+import AdminPage from "./components/AdminPage.vue";
 
 const user = ref(null);
 const error = ref("");
+const role = ref("USER");
 const currentPage = ref("home");
+
+function openAdminPage() {
+  currentPage.value = "admin";
+}
 
 async function login() {
   error.value = "";
@@ -14,6 +20,20 @@ async function login() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     user.value = result.user;
+    const token = await result.user.getIdToken();
+
+    const response = await fetch("http://localhost:8080/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Could not load user profile");
+    }
+
+    const profile = await response.json();
+    role.value = profile.role;
   } catch (err) {
     error.value = err.message;
   }
@@ -22,6 +42,7 @@ async function login() {
 async function logout() {
   await signOut(auth);
   user.value = null;
+  role.value = "USER";
   currentPage.value = "home";
 }
 
@@ -41,18 +62,30 @@ function goHome() {
     @back="goHome"
   />
 
+  <AdminPage
+  v-else-if="user && currentPage === 'admin'"
+  @back="goHome"
+  />
+
   <main v-else>
     <h1>Cinema Ticket Booking</h1>
-
+    
     <button v-if="!user" @click="login">
       Sign in with Google
     </button>
 
     <section v-else>
       <p>Signed in as: {{ user.email }}</p>
+      <p>Role: {{ role }}</p>
 
       <button @click="openBookingPage">
         My bookings
+      </button>
+
+      <button v-if="role === 'ADMIN'"
+        @click="openAdminPage"
+      >
+        Admin Dashboard
       </button>
 
       <button @click="logout">

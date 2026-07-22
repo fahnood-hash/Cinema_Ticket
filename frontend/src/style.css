@@ -52,6 +52,7 @@
 
 body {
   margin: 0;
+  width: 100%;
 }
 
 h1,
@@ -156,7 +157,7 @@ code {
   }
 }
 
-#app {
+/*#app {
   width: 1126px;
   max-width: 100%;
   margin: 0 auto;
@@ -165,6 +166,13 @@ code {
   min-height: 100svh;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+}*/
+#app {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
