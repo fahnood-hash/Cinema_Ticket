@@ -12,11 +12,13 @@ import (
 )
 
 type FirebaseAuthenticator struct {
-	client *firebaseauth.Client
+	client     *firebaseauth.Client
+	adminEmail string
 }
 
 func NewFirebaseAuthenticator(
 	credentialsPath string,
+	adminEmail string,
 ) (*FirebaseAuthenticator, error) {
 	app, err := firebase.NewApp(
 		context.Background(),
@@ -33,7 +35,8 @@ func NewFirebaseAuthenticator(
 	}
 
 	return &FirebaseAuthenticator{
-		client: client,
+		client:     client,
+		adminEmail: adminEmail,
 	}, nil
 }
 
@@ -59,9 +62,18 @@ func (a *FirebaseAuthenticator) RequireAuth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		email, _ := token.Claims["email"].(string)
+		fmt.Println("Firebase email:", email)
+		fmt.Println("Admin email:", a.adminEmail)
+
+		role := "USER"
+		if strings.EqualFold(email, a.adminEmail) {
+			role = "ADMIN"
+		}
 
 		c.Set("userID", token.UID)
-		c.Set("email", token.Claims["email"])
+		c.Set("email", email)
+		c.Set("role", role)
 		c.Next()
 	}
 }
@@ -71,4 +83,18 @@ func UserID(c *gin.Context) string {
 	value, _ := userID.(string)
 
 	return value
+}
+
+func (a *FirebaseAuthenticator) RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetString("role") != "ADMIN" {
+			c.JSON(403, gin.H{
+				"error": "admin access required",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }

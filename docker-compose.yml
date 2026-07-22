@@ -12,6 +12,7 @@ services:
       REDIS_ADDR: redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
     volumes:
       - ./backend/secrets:/app/secrets:ro
     depends_on:

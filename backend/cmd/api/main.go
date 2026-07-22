@@ -68,7 +68,9 @@ func main() {
 			"FIREBASE_CREDENTIALS_PATH",
 			"secrets/firebase-service-account.json",
 		),
+		getEnv("ADMIN_EMAIL", ""),
 	)
+
 	if err != nil {
 		log.Fatal("Firebase initialization failed: ", err)
 	}
@@ -83,6 +85,7 @@ func main() {
 		c.JSON(200, gin.H{
 			"user_id": authentication.UserID(c),
 			"email":   c.GetString("email"),
+			"role":    c.GetString("role"),
 		})
 	})
 
@@ -105,7 +108,7 @@ func main() {
 	)
 
 	seatHandler := handler.NewSeatHandler(bookingService)
-
+	adminHandler := handler.NewAdminHandler(bookingRepo)
 	r.GET("/seats", seatHandler.ListSeats)
 	r.POST("/seats/:seatID/lock", seatHandler.LockSeat)
 	r.POST("/bookings/:sessionID/confirm", seatHandler.ConfirmBooking)
@@ -117,6 +120,11 @@ func main() {
 			"redis":  "connected",
 		})
 	})
-
+	r.GET(
+		"/admin/bookings",
+		firebaseAuth.RequireAuth(),
+		firebaseAuth.RequireAdmin(),
+		adminHandler.ListBookings,
+	)
 	r.Run(":8080")
 }
